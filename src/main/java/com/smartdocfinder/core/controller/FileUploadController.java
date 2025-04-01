@@ -1,3 +1,7 @@
+package com.smartdocfinder.core.controller;
+
+
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -11,7 +15,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class FileUploadController {
     @PostMapping(path = "/upload")
     public ResponseEntity<String> uploadFile(@RequestParam("file") MultipartFile file) {
-        System.out.println("file received!");
+    
         if(file.isEmpty()){
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("file is empty or missing");
         }
