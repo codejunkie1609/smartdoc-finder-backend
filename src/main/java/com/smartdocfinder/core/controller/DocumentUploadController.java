@@ -3,6 +3,7 @@ package com.smartdocfinder.core.controller;
 
 
 import java.io.IOException;
+import java.net.http.HttpRequest;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,6 +18,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.smartdocfinder.core.service.DocumentUploadService;
 import com.smartdocfinder.core.util.Constants;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 @RestController
 @RequestMapping("/api/files")
