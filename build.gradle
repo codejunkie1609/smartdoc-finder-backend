@@ -32,6 +32,8 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	runtimeOnly 'org.postgresql:postgresql'
+	implementation 'org.apache.tika:tika-core:2.9.3'
+    implementation 'org.apache.tika:tika-parsers-standard-package:2.9.3'
 }
 
 tasks.named('test') {

@@ -6,7 +6,9 @@ import java.net.http.HttpRequest;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.MessageDigest;
 import java.time.LocalDateTime;
+import java.util.HexFormat;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,42 +21,53 @@ import com.smartdocfinder.core.controller.DocumentUploadController;
 import com.smartdocfinder.core.model.Document;
 import com.smartdocfinder.core.repository.DocumentRepository;
 
-import jakarta.servlet.ServletContext;
-import jakarta.servlet.http.HttpServletRequest;
-
 @Service
 public class DocumentUploadService {
     private static final Logger logger = LoggerFactory.getLogger(DocumentUploadController.class);
     @Autowired
     private ApplicationContext applicationContext;
 
-
+    private String computeFileHash(byte[] bytes) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        byte[] hash = digest.digest(bytes);
+        return HexFormat.of().formatHex(hash);
+    }
    
 
     private static final String UPLOAD_DIR = System.getProperty("user.home") + "/smartdoc-uploads";
-    public void save(MultipartFile file) throws IOException {
+    public void save(MultipartFile file, String content) throws IOException, IllegalArgumentException {
+        byte[] fileBytes = file.getBytes();
+        String fileHash;
+    
+        try {
+            fileHash = computeFileHash(fileBytes);
+        } catch (Exception e) {
+            throw new RuntimeException("Error computing file hash", e);
+        }
+    
+        DocumentRepository repo = applicationContext.getBean(DocumentRepository.class);
+        if (repo.existsByFileHash(fileHash)) {
+            throw new IllegalArgumentException("File already exists");
+        }
+    
         String originalFileName = file.getOriginalFilename();
         String safeName = System.currentTimeMillis() + "_" + originalFileName;
     
-        // Ensure directory exists
         Path uploadDir = Paths.get(UPLOAD_DIR);
         Files.createDirectories(uploadDir);
-    
-        // Define final path
         Path path = uploadDir.resolve(safeName);
+        Files.write(path, fileBytes);
     
-        // Write file to disk
-        Files.write(path, file.getBytes());
-    
-        // Save document metadata
         Document doc = new Document();
         doc.setFileName(originalFileName);
         doc.setFilePath(path.toAbsolutePath().toString());
         doc.setFileType(file.getContentType());
         doc.setFileSize(file.getSize());
         doc.setUploadedAt(LocalDateTime.now());
+        doc.setFileHash(fileHash);
+        doc.setContent(content);
     
-        applicationContext.getBean(DocumentRepository.class).save(doc);
+        repo.save(doc);
     }
     
     

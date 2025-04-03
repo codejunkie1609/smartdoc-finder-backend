@@ -11,6 +11,6 @@ import com.smartdocfinder.core.model.Document;
 
 @Repository
 public interface DocumentRepository extends JpaRepository<Document, Long> {
-
+    boolean existsByFileHash(String fileHash);
     
 }

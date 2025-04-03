@@ -2,6 +2,7 @@ package com.smartdocfinder.core.model;
 
 import java.time.LocalDateTime;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -17,14 +18,22 @@ import lombok.Setter;
 @Entity
 @Table(name = "documents")
 public class Document {
-    @Id  
+    @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Getter @Setter private Long id;
-    @Getter @Setter  private String fileName;
+
+    @Getter @Setter private String fileName;
     @Getter @Setter private String filePath;
     @Getter @Setter private Long fileSize;
     @Getter @Setter private String fileType;
     @Getter @Setter private LocalDateTime uploadedAt = LocalDateTime.now();
 
-    
+    @Getter @Setter
+    @Column(unique = true)
+    private String fileHash; 
+
+    @Getter @Setter
+    @Column(columnDefinition = "TEXT")
+    private String content;
 }
+

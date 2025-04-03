@@ -3,8 +3,10 @@ package com.smartdocfinder.core.controller;
 
 
 import java.io.IOException;
-import java.net.http.HttpRequest;
+import java.io.InputStream;
+import java.util.Set;
 
+import org.apache.tika.exception.TikaException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,10 +18,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.smartdocfinder.core.service.DocumentParserService;
 import com.smartdocfinder.core.service.DocumentUploadService;
 import com.smartdocfinder.core.util.Constants;
-
-import jakarta.servlet.http.HttpServletRequest;
 
 @RestController
 @RequestMapping("/api/files")
@@ -28,28 +29,52 @@ public class DocumentUploadController {
     @Autowired
     private DocumentUploadService documentUploadService;
 
-  
+    private static final Set<String> ALLOWED_TYPES = Set.of(
+        "application/pdf",
+        "application/msword",                  // .doc
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // .docx
+        "text/plain"
+    );
 
     @PostMapping(path = "/upload")
-    public ResponseEntity<String> uploadFile(@RequestParam("file") MultipartFile file) {
-    
+    public ResponseEntity<String> uploadFile(@RequestParam("file") MultipartFile file) {    
+        
+        
         if(file.isEmpty()){
+            logger.info("file is empty!");
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("file is empty or missing");
         }
 
         String contentType = file.getContentType();
         
         if (!Constants.ALLOWED_CONTENT_TYPES.contains(contentType)) {
+            logger.info("content is of Unsupported type: {}", contentType);
             return ResponseEntity.badRequest().body("Unsupported file type: " + contentType);
         }
         try{
-            documentUploadService.save(file);
+            byte[] fileBytes = file.getBytes();
+            InputStream stream = file.getInputStream();
+            String mediaType = DocumentParserService.detectMediaType(fileBytes);
+            logger.info("media type: {}", mediaType);
+            if (!ALLOWED_TYPES.contains(mediaType)) {
+                throw new IllegalArgumentException("Unsupported file type: " + mediaType);
+            }
+            String content = DocumentParserService.extractContent(stream);
+            documentUploadService.save(file, content);
+            logger.info("file uploaded successfully!");
             return ResponseEntity.ok("File uploaded successfully");
 
         }
         catch(IOException e){
-            e.printStackTrace();
+            logger.error("I/O error occurred! {}" , e.getMessage());
             return ResponseEntity.internalServerError().body("Failed to process file");
+        }
+        catch(IllegalArgumentException e){
+            logger.error("Illegal argument error occurred! {}" , e.getMessage());
+            return ResponseEntity.internalServerError().body("File exists/ is of an unsupported type");
+        } catch (TikaException e) {
+            logger.error("Tika error occurred! {}" , e.getMessage());
+            return ResponseEntity.internalServerError().body("error");
         }
     }
 }
