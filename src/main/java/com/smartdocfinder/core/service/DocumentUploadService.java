@@ -17,16 +17,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.smartdocfinder.core.controller.Constants;
-import com.smartdocfinder.core.controller.DocumentUploadController;
+import com.smartdocfinder.core.controller.DocumentController;
 import com.smartdocfinder.core.model.Document;
 import com.smartdocfinder.core.repository.DocumentRepository;
 import com.smartdocfinder.core.util.Utilities;
 
 @Service
 public class DocumentUploadService {
-    private static final Logger logger = LoggerFactory.getLogger(DocumentUploadController.class);
+    private static final Logger logger = LoggerFactory.getLogger(DocumentController.class);
     @Autowired
     private ApplicationContext applicationContext;
+
+    @Autowired
+    private LuceneService luceneService;
 
     private static final String UPLOAD_DIR = System.getProperty("user.home") + "/smartdoc-uploads";
 
@@ -79,7 +82,12 @@ public class DocumentUploadService {
         doc.setUploadedAt(LocalDateTime.now());
         doc.setFileHash(fileHash);
         doc.setContent(content);
-        repo.save(doc);
+        Document savedDoc = repo.save(doc);
+
+        luceneService.indexDocument(
+                savedDoc.getId(),
+                savedDoc.getFileName(),
+                savedDoc.getContent());
         stream.close();
     }
 
