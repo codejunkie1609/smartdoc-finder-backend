@@ -4,6 +4,7 @@ package com.smartdocfinder.core.controller;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.http.HttpRequest;
 import java.util.Set;
 
 import org.apache.tika.exception.TikaException;
@@ -29,17 +30,10 @@ public class DocumentUploadController {
     @Autowired
     private DocumentUploadService documentUploadService;
 
-    private static final Set<String> ALLOWED_TYPES = Set.of(
-        "application/pdf",
-        "application/msword",                  // .doc
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // .docx
-        "text/plain"
-    );
+    
 
     @PostMapping(path = "/upload")
     public ResponseEntity<String> uploadFile(@RequestParam("file") MultipartFile file) {    
-        
-        
         if(file.isEmpty()){
             logger.info("file is empty!");
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("file is empty or missing");
@@ -47,20 +41,13 @@ public class DocumentUploadController {
 
         String contentType = file.getContentType();
         
-        if (!Constants.ALLOWED_CONTENT_TYPES.contains(contentType)) {
+        if (!Constants.ALLOWED_TYPES.contains(contentType)) {
             logger.info("content is of Unsupported type: {}", contentType);
             return ResponseEntity.badRequest().body("Unsupported file type: " + contentType);
         }
+        
         try{
-            byte[] fileBytes = file.getBytes();
-            InputStream stream = file.getInputStream();
-            String mediaType = DocumentParserService.detectMediaType(fileBytes);
-            logger.info("media type: {}", mediaType);
-            if (!ALLOWED_TYPES.contains(mediaType)) {
-                throw new IllegalArgumentException("Unsupported file type: " + mediaType);
-            }
-            String content = DocumentParserService.extractContent(stream);
-            documentUploadService.save(file, content);
+            documentUploadService.save(file);
             logger.info("file uploaded successfully!");
             return ResponseEntity.ok("File uploaded successfully");
 
@@ -73,8 +60,9 @@ public class DocumentUploadController {
             logger.error("Illegal argument error occurred! {}" , e.getMessage());
             return ResponseEntity.internalServerError().body("File exists/ is of an unsupported type");
         } catch (TikaException e) {
-            logger.error("Tika error occurred! {}" , e.getMessage());
-            return ResponseEntity.internalServerError().body("error");
-        }
+            logger.error("Illegal argument error occurred! {}" , e.getMessage());
+            return ResponseEntity.internalServerError().body("Tika Error");
+                } 
+               
     }
 }
