@@ -42,9 +42,9 @@ public class DocumentUploadService {
             throw new IllegalArgumentException("Unsupported file type: " + mediaType);
         }
 
-        String originalFilename = file.getOriginalFilename();
-        String extension = originalFilename != null && originalFilename.contains(".")
-                ? originalFilename.substring(originalFilename.lastIndexOf('.') + 1).toLowerCase()
+        String originalFileName = file.getOriginalFilename();
+        String extension = originalFileName != null && originalFileName.contains(".")
+                ? originalFileName.substring(originalFileName.lastIndexOf('.') + 1).toLowerCase()
                 : "";
         logger.info("File extension: {}", extension);
 
@@ -66,7 +66,6 @@ public class DocumentUploadService {
             throw new IllegalArgumentException("File already exists");
         }
 
-        String originalFileName = file.getOriginalFilename();
         String safeName = System.currentTimeMillis() + "_" + originalFileName;
 
         Path uploadDir = Paths.get(UPLOAD_DIR);
