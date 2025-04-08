@@ -16,9 +16,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.smartdocfinder.core.ai.EmbeddingClient;
 import com.smartdocfinder.core.dto.SearchResult;
 import com.smartdocfinder.core.service.DocumentUploadService;
 import com.smartdocfinder.core.service.LuceneService;
+import com.smartdocfinder.core.service.SemanticSearchService;
 
 @RestController
 @RequestMapping("/api/files")
@@ -29,6 +31,9 @@ public class DocumentController {
 
     @Autowired
     private LuceneService luceneService;
+
+    @Autowired
+    private SemanticSearchService semanticSearchService;
 
     @PostMapping(path = "/upload")
     public ResponseEntity<String> uploadFile(@RequestParam("file") MultipartFile file) {
@@ -66,6 +71,7 @@ public class DocumentController {
     public ResponseEntity<List<SearchResult>> search(@RequestParam("q") String query) {
         try {
             List<SearchResult> results = luceneService.search(query, 10);
+            semanticSearchService.testSemanticEmbedding();
             return ResponseEntity.ok(results);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
