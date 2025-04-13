@@ -71,9 +71,10 @@ public class DocumentController {
     public ResponseEntity<List<SearchResult>> search(@RequestParam("q") String query) {
         try {
             List<SearchResult> results = luceneService.search(query, 10);
-            semanticSearchService.testSemanticEmbedding();
+            //semanticSearchService.testSemanticEmbedding();
             return ResponseEntity.ok(results);
         } catch (Exception e) {
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
