@@ -2,8 +2,10 @@ package com.smartdocfinder.core.service;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.apache.el.parser.ParseException;
@@ -31,9 +33,15 @@ import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.highlight.Highlighter;
 import org.apache.lucene.search.highlight.QueryScorer;
 import org.apache.lucene.store.FSDirectory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import com.smartdocfinder.core.dto.MultiEmbeddingResponse;
 import com.smartdocfinder.core.dto.SearchResult;
+import com.smartdocfinder.core.dto.SemanticSearchResponse;
+import com.smartdocfinder.core.model.DocumentEntity;
+import com.smartdocfinder.core.ai.EmbeddingClient;
+
 
 import lombok.RequiredArgsConstructor;
 
@@ -46,12 +54,19 @@ public class LuceneService {
     private static final int SNIPPET_LENGTH = 200;
     private static final String FUZZY_EDIT_DISTANCE = "~1";
 
+
+    @Autowired
+    private SemanticSearchService semanticSearchService;
+
+    @Autowired
+    private EmbeddingClient embeddingClient;
+
     public void indexDocument(Long id, String filename, String content) throws IOException {
     try (IndexWriter writer = new IndexWriter(luceneDirectory, new IndexWriterConfig(luceneAnalyzer))) {
         Document doc = new Document();
         doc.add(new StringField("id", id.toString(), Field.Store.YES));
         doc.add(new TextField("filename", filename, Field.Store.YES));
-        doc.add(new TextField("filename_autocomplete", filename, Field.Store.NO)); // 🔁 EdgeNGram target
+        doc.add(new TextField("filename_autocomplete", filename, Field.Store.NO)); // EdgeNGram target
         doc.add(new TextField("content", content, Field.Store.YES));
         writer.updateDocument(new Term("id", id.toString()), doc);
     }
@@ -59,11 +74,69 @@ public class LuceneService {
 
 public List<SearchResult> search(String queryStr, int maxHits) throws Exception {
     String normalizedQuery = normalizeQuery(queryStr);
+
     try (DirectoryReader reader = DirectoryReader.open(luceneDirectory)) {
         IndexSearcher searcher = new IndexSearcher(reader);
         Query finalQuery = buildFinalQuery(normalizedQuery);
         TopDocs hits = searcher.search(finalQuery, maxHits);
-        return processSearchResults(searcher, hits, finalQuery);
+
+        // 🔁 Get semantic results
+        MultiEmbeddingResponse embed = embeddingClient.embedQuery(normalizedQuery);
+        List<Float> baseVector = embed.getBase();
+        SemanticSearchResponse faissResults = semanticSearchService.search(baseVector);
+
+        // 🔁 Build semantic map: docId → semanticScore
+        Map<String, Float> semanticMap = new HashMap<>();
+        for (SemanticSearchResponse.SemanticHit hit : faissResults.getHits()) {
+            semanticMap.put(hit.getDocId(), hit.getScore());
+        }
+
+        // 🔁 Process Lucene hits and attach semantic scores
+        List<SearchResult> results = new ArrayList<>();
+        StoredFields storedFields = searcher.storedFields();
+        String[] fields = {"filename", "content"};
+
+        for (ScoreDoc hit : hits.scoreDocs) {
+            Document doc = storedFields.document(hit.doc);
+            String docId = doc.get("id");
+
+            SearchResult result = createSearchResult(doc, finalQuery, searcher, fields);
+            result.setLuceneScore(hit.score);
+
+            if (semanticMap.containsKey(docId)) {
+                result.setSemanticScore(semanticMap.get(docId));
+                result.setSemanticOnly(false);
+                semanticMap.remove(docId);
+            } else {
+                result.setSemanticScore(0f);
+                result.setSemanticOnly(false);
+            }
+
+            results.add(result);
+        }
+
+        // 🔁 Add FAISS-only hits
+        for (Map.Entry<String, Float> entry : semanticMap.entrySet()) {
+            Long docId = Long.parseLong(entry.getKey());
+            Float score = entry.getValue();
+
+            DocumentEntity docEntity = semanticSearchService.fetchDocumentById(docId); // You must implement this
+            if (docEntity != null) {
+                SearchResult result = new SearchResult();
+                result.setFilename(docEntity.getFileName());
+                result.setSnippet(docEntity.getContent().length() > SNIPPET_LENGTH
+                        ? docEntity.getContent().substring(0, SNIPPET_LENGTH) + "..."
+                        : docEntity.getContent());
+                result.setSemanticScore(score);
+                result.setSemanticOnly(true);
+                result.setLuceneScore(0f);
+                result.setMatchType("semantic-only");
+
+                results.add(result);
+            }
+        }
+
+        return results;
     }
 }
 

@@ -17,7 +17,7 @@ import lombok.Setter;
 @NoArgsConstructor
 @Entity
 @Table(name = "documents")
-public class Document {
+public class DocumentEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Getter @Setter private Long id;

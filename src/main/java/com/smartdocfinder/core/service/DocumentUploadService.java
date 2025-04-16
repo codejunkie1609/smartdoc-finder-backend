@@ -18,7 +18,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.smartdocfinder.core.controller.Constants;
 import com.smartdocfinder.core.controller.DocumentController;
-import com.smartdocfinder.core.model.Document;
+import com.smartdocfinder.core.model.DocumentEntity;
 import com.smartdocfinder.core.repository.DocumentRepository;
 import com.smartdocfinder.core.util.Utilities;
 
@@ -73,7 +73,7 @@ public class DocumentUploadService {
         Path path = uploadDir.resolve(safeName);
         Files.write(path, fileBytes);
 
-        Document doc = new Document();
+        DocumentEntity doc = new DocumentEntity();
         doc.setFileName(originalFileName);
         doc.setFilePath(path.toAbsolutePath().toString());
         doc.setFileType(file.getContentType());
@@ -81,7 +81,7 @@ public class DocumentUploadService {
         doc.setUploadedAt(LocalDateTime.now());
         doc.setFileHash(fileHash);
         doc.setContent(content);
-        Document savedDoc = repo.save(doc);
+        DocumentEntity savedDoc = repo.save(doc);
 
         luceneService.indexDocument(
                 savedDoc.getId(),

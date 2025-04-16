@@ -7,8 +7,14 @@ import lombok.Setter;
 
 @NoArgsConstructor
 @AllArgsConstructor
+@Getter
+@Setter
 public class SearchResult {
-    @Getter @Setter private String filename;
-    @Getter @Setter private String matchType;
-    @Getter @Setter private String snippet;
+    private String filename;
+    private String matchType;
+    private String snippet;
+    private Float semanticScore;
+    private boolean semanticOnly;
+    private Float luceneScore;
+
 }
