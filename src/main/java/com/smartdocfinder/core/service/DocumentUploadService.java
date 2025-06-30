@@ -1,5 +1,6 @@
 package com.smartdocfinder.core.service;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -31,63 +32,63 @@ public class DocumentUploadService {
     @Autowired
     private LuceneService luceneService;
 
-    private static final String UPLOAD_DIR = System.getProperty("user.home") + "/smartdoc-uploads";
+   
 
-    public void save(MultipartFile file) throws IOException, IllegalArgumentException, TikaException {
-        byte[] fileBytes = file.getBytes();
-        InputStream stream = file.getInputStream();
-        String mediaType = DocumentParserService.detectMediaType(fileBytes);
-        logger.info("media type: {}", mediaType);
-        if (!Constants.ALLOWED_TYPES.contains(mediaType)) {
-            throw new IllegalArgumentException("Unsupported file type: " + mediaType);
-        }
+    public void parseAndIndex(InputStream stream, String originalFileName, String contentType, String filePath)
+        throws IOException, TikaException {
 
-        String originalFileName = file.getOriginalFilename();
-        String extension = originalFileName != null && originalFileName.contains(".")
-                ? originalFileName.substring(originalFileName.lastIndexOf('.') + 1).toLowerCase()
-                : "";
-        logger.info("File extension: {}", extension);
+    byte[] fileBytes = stream.readAllBytes();
 
-        if (!Constants.ALLOWED_EXTENSIONS.contains(extension)) {
-            logger.info("Unsupported file extension: {}", extension);
-            throw new UnsupportedFormatException("not of expected extension");
-        }
-        String content = DocumentParserService.extractContent(stream);
-        String fileHash;
-
-        try {
-            fileHash = Utilities.computeFileHash(fileBytes);
-        } catch (Exception e) {
-            throw new RuntimeException("Error computing file hash", e);
-        }
-
-        DocumentRepository repo = applicationContext.getBean(DocumentRepository.class);
-        if (repo.existsByFileHash(fileHash)) {
-            throw new IllegalArgumentException("File already exists");
-        }
-
-        String safeName = System.currentTimeMillis() + "_" + originalFileName;
-
-        Path uploadDir = Paths.get(UPLOAD_DIR);
-        Files.createDirectories(uploadDir);
-        Path path = uploadDir.resolve(safeName);
-        Files.write(path, fileBytes);
-
-        DocumentEntity doc = new DocumentEntity();
-        doc.setFileName(originalFileName);
-        doc.setFilePath(path.toAbsolutePath().toString());
-        doc.setFileType(file.getContentType());
-        doc.setFileSize(file.getSize());
-        doc.setUploadedAt(LocalDateTime.now());
-        doc.setFileHash(fileHash);
-        doc.setContent(content);
-        DocumentEntity savedDoc = repo.save(doc);
-
-        luceneService.indexDocument(
-                savedDoc.getId(),
-                savedDoc.getFileName(),
-                savedDoc.getContent());
-        stream.close();
+    // Validate MIME type
+    String mediaType = DocumentParserService.detectMediaType(fileBytes);
+    logger.info("media type: {}", mediaType);
+    if (!Constants.ALLOWED_TYPES.contains(mediaType)) {
+        throw new IllegalArgumentException("Unsupported file type: " + mediaType);
     }
+
+    // Validate extension
+    String extension = originalFileName != null && originalFileName.contains(".")
+            ? originalFileName.substring(originalFileName.lastIndexOf('.') + 1).toLowerCase()
+            : "";
+    logger.info("File extension: {}", extension);
+    if (!Constants.ALLOWED_EXTENSIONS.contains(extension)) {
+        logger.info("Unsupported file extension: {}", extension);
+        throw new UnsupportedFormatException("Not of expected extension: " + extension);
+    }
+
+    // Extract content
+    String content = DocumentParserService.extractContent(new ByteArrayInputStream(fileBytes));
+
+    // OPTIONAL: Deduplication
+    String fileHash;
+    try {
+        fileHash = Utilities.computeFileHash(fileBytes);
+    } catch (Exception e) {
+        throw new RuntimeException("Error computing file hash", e);
+    }
+
+    DocumentRepository repo = applicationContext.getBean(DocumentRepository.class);
+    if (repo.existsByFileHash(fileHash)) {
+        throw new IllegalArgumentException("File already indexed");
+    }
+
+    // Persist minimal metadata
+    DocumentEntity doc = new DocumentEntity();
+    doc.setFileName(originalFileName);
+    doc.setFileType(contentType);
+    doc.setUploadedAt(LocalDateTime.now());
+    doc.setFileHash(fileHash);
+    doc.setContent(content);
+    doc.setFilePath(filePath);  // ✅ Store full file path
+
+    DocumentEntity savedDoc = repo.save(doc);
+
+    // Index with Lucene
+    luceneService.indexDocument(
+            savedDoc.getId(),
+            savedDoc.getFileName(),
+            savedDoc.getContent());
+}
+
 
 }

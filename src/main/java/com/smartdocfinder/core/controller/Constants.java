@@ -16,10 +16,11 @@ public class Constants {
                         "text/markdown",
                         "text/csv",
                         "application/x-yaml",
-                        "text/yaml");
+                        "text/yaml",
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 
         public static final Set<String> ALLOWED_EXTENSIONS = Set.of(
                         "txt", "pdf", "doc", "docx", "odt", "rtf",
                         "html", "htm", "xml", "json", "md", "csv", "log",
-                        "yml", "yaml", "conf", "ini");
+                        "yml", "yaml", "conf", "ini", "xlsx","");
 }

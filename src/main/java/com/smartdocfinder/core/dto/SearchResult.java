@@ -16,5 +16,9 @@ public class SearchResult {
     private Float semanticScore;
     private boolean semanticOnly;
     private Float luceneScore;
+    private Float hybridScore;
+    @Getter @Setter
+    private String beirDocId;
+
 
 }

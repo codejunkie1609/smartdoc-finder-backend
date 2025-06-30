@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 
 @EnableJpaRepositories(basePackages = "com.smartdocfinder.core.repository")
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = "com.smartdocfinder.core")
 public class SmartDocFinderBackendApplication {
 
 	public static void main(String[] args) {
