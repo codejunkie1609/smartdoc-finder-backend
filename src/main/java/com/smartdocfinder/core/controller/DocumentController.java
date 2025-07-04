@@ -42,6 +42,48 @@ public class DocumentController {
     @Autowired
     private LuceneService luceneService;
 
+
+    @GetMapping(value = "analyze-directory", produces = MediaType.APPLICATION_JSON_VALUE)
+public ResponseEntity<Map<String, Object>> analyzeDirectory(@RequestParam String path) {
+    try {
+        Path targetDir = Paths.get(path).toAbsolutePath().normalize();
+        if (!Files.exists(targetDir) || !Files.isDirectory(targetDir)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid path: " + path));
+        }
+
+        List<Path> files = Files.walk(targetDir)
+            .filter(Files::isRegularFile)
+            .filter(p -> {
+                String name = p.getFileName().toString().toLowerCase();
+                int dotIndex = name.lastIndexOf('.');
+                if (dotIndex == -1) return false;
+                String ext = name.substring(dotIndex + 1);
+                return Constants.ALLOWED_EXTENSIONS.contains(ext);
+            })
+            .toList();
+
+        long totalSizeBytes = files.stream()
+            .mapToLong(p -> {
+                try {
+                    return Files.size(p);
+                } catch (IOException e) {
+                    return 0L;
+                }
+            })
+            .sum();
+
+        return ResponseEntity.ok(Map.of(
+            "totalFiles", files.size(),
+            "totalSizeBytes", totalSizeBytes
+        ));
+    } catch (IOException e) {
+        logger.error("Error analyzing directory", e);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+            .body(Map.of("error", e.getMessage()));
+    }
+}
+
+
     @GetMapping(value = "/index-directory-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
 public SseEmitter streamIndexing(@RequestParam String path) {
     SseEmitter emitter = new SseEmitter(0L); // No timeout
@@ -50,7 +92,7 @@ public SseEmitter streamIndexing(@RequestParam String path) {
         try {
             Path targetDir = Paths.get(path).toAbsolutePath().normalize();
             if (!Files.exists(targetDir) || !Files.isDirectory(targetDir)) {
-                emitter.send(SseEmitter.event().data("❌ Invalid path: " + path));
+                emitter.send(SseEmitter.event().data("{\"error\": \"Invalid path: " + path + "\"}"));
                 emitter.complete();
                 return;
             }
@@ -66,33 +108,47 @@ public SseEmitter streamIndexing(@RequestParam String path) {
                 })
                 .toList();
 
-            emitter.send(SseEmitter.event().data("📁 Found " + files.size() + " files to index. Starting..."));
+            int totalFiles = files.size();
+            int indexedFiles = 0;
 
-            int success = 0, failed = 0;
-
-            for (int i = 0; i < files.size(); i++) {
-                Path file = files.get(i);
+            for (Path file : files) {
                 try (InputStream in = Files.newInputStream(file)) {
                     String contentType = Files.probeContentType(file);
-                    documentUploadService.parseAndIndex(in, file.getFileName().toString(), contentType, file.toString());
-                    success++;
-                    emitter.send(SseEmitter.event().data("✅ Indexed: " + file.getFileName()));
+                    documentUploadService.parseAndIndex(
+                        in,
+                        file.getFileName().toString(),
+                        contentType,
+                        file.toString()
+                    );
+                    indexedFiles++;
                 } catch (Exception e) {
-                    failed++;
-                    emitter.send(SseEmitter.event().data("❌ Failed: " + file.getFileName() + " (" + e.getMessage() + ")"));
+                    // Log but don't emit per-file errors to client (to keep it clean)
+                    logger.warn("Failed to index file: {}", file, e);
+                }
+
+                // Send progress update every 10 files or on last file
+                if (indexedFiles % 10 == 0 || indexedFiles == totalFiles) {
+                    String progressJson = String.format(
+                        "{\"indexedFiles\": %d, \"totalFiles\": %d}",
+                        indexedFiles, totalFiles
+                    );
+                    emitter.send(SseEmitter.event().data(progressJson));
                 }
             }
 
-            emitter.send(SseEmitter.event().data("🎉 Done. Success: " + success + ", Failed: " + failed));
+            emitter.complete();
         } catch (IOException e) {
             try {
-                emitter.send(SseEmitter.event().data("🔥 Error: " + e.getMessage()));
+                emitter.send(SseEmitter.event().data("{\"error\": \"Error: " + e.getMessage() + "\"}"));
             } catch (IOException ignored) {}
-        } 
+        } finally {
+            emitter.complete();
+        }
     });
 
     return emitter;
 }
+
 
 
     @GetMapping("/search")

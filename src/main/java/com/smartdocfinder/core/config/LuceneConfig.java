@@ -18,7 +18,7 @@ import java.util.Map;
 @Configuration
 public class LuceneConfig {
 
-    private static final String LUCENE_INDEX_DIR = System.getProperty("user.home") + "/smartdoc-index";
+    private static final String LUCENE_INDEX_DIR = "/lucene-index";
 
     @Bean
     public FSDirectory luceneDirectory() throws IOException {
