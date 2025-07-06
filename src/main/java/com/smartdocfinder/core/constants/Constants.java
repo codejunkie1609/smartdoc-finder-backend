@@ -1,4 +1,4 @@
-package com.smartdocfinder.core.controller;
+package com.smartdocfinder.core.constants;
 
 import java.util.Set;
 
@@ -18,9 +18,4 @@ public class Constants {
                         "application/x-yaml",
                         "text/yaml",
                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-
-        public static final Set<String> ALLOWED_EXTENSIONS = Set.of(
-                        "txt", "pdf", "doc", "docx", "odt", "rtf",
-                        "html", "htm", "xml", "json", "md", "csv", "log",
-                        "yml", "yaml", "conf", "ini", "xlsx","");
 }
