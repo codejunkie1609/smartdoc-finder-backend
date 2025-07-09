@@ -17,8 +17,9 @@ public class SearchResult {
     private boolean semanticOnly;
     private Float luceneScore;
     private Float hybridScore;
-    @Getter @Setter
-    private String beirDocId;
-
-
+    private String id; // This is the Lucene document ID, not the database ID
+    private String fileHash; // The hash of the file content
+    private String contentType; // The MIME type of the file
+    private String originalFileName; // The original file name as stored in the database
+    private String filePath; // The path to the file in the filesystem
 }

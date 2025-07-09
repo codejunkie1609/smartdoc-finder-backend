@@ -2,6 +2,7 @@ package com.smartdocfinder.core.controller;
 
 
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -36,13 +37,17 @@ public class DocumentController {
 
 
     @GetMapping("/search")
-    public ResponseEntity<List<SearchResult>> search(@RequestParam("q") String query, @RequestParam("maxHits") Integer maxHits ) {
+    public ResponseEntity<Map<String, Object>> searchFiles(
+            @RequestParam("q") String query,
+            @RequestParam(value = "maxHits", defaultValue = "100") int maxHits) {
         try {
-            List<SearchResult> results = luceneService.search(query, maxHits);
-            return ResponseEntity.ok(results);
+            // The luceneService.search() method now correctly returns a Map
+            Map<String, Object> response = luceneService.search(query, maxHits);
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            // It's good practice to log the exception here
+            // logger.error("Search failed for query: {}", query, e);
+            return ResponseEntity.status(500).body(Map.of("error", "Search failed due to an internal error."));
         }
     }
 
