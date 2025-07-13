@@ -23,6 +23,7 @@ public class LuceneIndexRunner implements CommandLineRunner {
 
     private static final Logger logger = LoggerFactory.getLogger(LuceneIndexRunner.class);
     private static final int BATCH_SIZE = 50; // The number of files to process in each batch
+    private static final int CONCURRENT_BATCHES = 20; // Number of concurrent batches to process
 
     @Value("${indexing.source-path}")
     private String sourceDirectoryPath;
@@ -61,7 +62,7 @@ public class LuceneIndexRunner implements CommandLineRunner {
         List<List<Path>> batches = Lists.partition(allFiles, BATCH_SIZE);
 
         // 3. Create a virtual thread executor to process batches in parallel.
-        ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+        ExecutorService executor = Executors.newFixedThreadPool(CONCURRENT_BATCHES);
 
         for (int i = 0; i < batches.size(); i++) {
             final int batchNumber = i + 1;

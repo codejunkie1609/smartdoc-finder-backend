@@ -2,6 +2,7 @@ package com.smartdocfinder.core.service;
 
 import com.smartdocfinder.core.ai.EmbeddingClient;
 import com.smartdocfinder.core.dto.MultiEmbeddingResponse;
+import com.smartdocfinder.core.dto.RAGResponse;
 import com.smartdocfinder.core.dto.SearchResult;
 import com.smartdocfinder.core.dto.SemanticSearchResponse;
 import com.smartdocfinder.core.model.DocumentEntity;
@@ -48,6 +49,10 @@ public class LuceneService {
     private final SemanticSearchService semanticSearchService;
     private final EmbeddingClient embeddingClient;
     private final DocumentRepository documentRepository; // Inject repository for batch fetching
+    private final RerankerService rerankerService;
+    private static final int INITIAL_RETRIEVAL_SIZE = 50; // Retrieve 50 candidates
+    private static final int RERANKED_TOP_K = 5;   
+    private final GeneratorService generatorService;
 
     private IndexWriter indexWriter;
 
@@ -82,29 +87,48 @@ public class LuceneService {
      * ✅ REFACTORED: Main search logic is now a high-level coordinator.
      * The complex steps of fetching, ranking, and merging are delegated to private methods.
      */
-    public Map<String, Object> search(String queryStr, int maxHits) throws Exception {
-        Map<String, Object> finalResponse = new HashMap<>();
-        
+    public RAGResponse search(String queryStr) throws Exception {
+        // 1. Initial Retrieval (Hybrid Search)
+        logger.info("--- Stage 1: Initial Retrieval ---");
+        List<SearchResult> initialCandidates = retrieveInitialCandidates(queryStr);
+
+        if (initialCandidates.isEmpty()) {
+            logger.warn("No initial candidates found for query: '{}'", queryStr);
+            return new RAGResponse("I could not find any relevant documents to answer your question.", List.of());
+        }
+
+        // 2. Re-ranking
+        logger.info("--- Stage 2: Re-ranking Top {} Candidates ---", initialCandidates.size());
+        List<SearchResult> rerankedCandidates = rerankerService.rerank(queryStr, initialCandidates);
+
+        // 3. Generation
+        logger.info("--- Stage 3: Generating Answer from Top {} Documents ---", RERANKED_TOP_K);
+        List<SearchResult> finalContext = rerankedCandidates.stream().limit(RERANKED_TOP_K).collect(Collectors.toList());
+        String generatedAnswer = generatorService.generateAnswer(queryStr, finalContext);
+
+        return new RAGResponse(generatedAnswer, finalContext);
+    }
+
+    /**
+     * ✅ NEW: This method performs the initial hybrid search to get a large set of candidates.
+     */
+    private List<SearchResult> retrieveInitialCandidates(String queryStr) throws Exception {
         try (DirectoryReader reader = DirectoryReader.open(indexWriter)) {
             IndexSearcher searcher = new IndexSearcher(reader);
             String normalizedQuery = normalizeQuery(queryStr);
             Query luceneQuery = buildLuceneQuery(normalizedQuery);
-            TopDocs luceneHits = searcher.search(luceneQuery, maxHits);
+            TopDocs luceneHits = searcher.search(luceneQuery, INITIAL_RETRIEVAL_SIZE);
 
-            // 1. Get rankings from both search methods
             Map<String, Integer> luceneRankMap = createRankMap(luceneHits, searcher);
             Map<String, Integer> semanticRankMap = getSemanticRankings(normalizedQuery, 0.3f);
 
-            // 2. Combine all unique document IDs
             Set<String> allDocIds = new HashSet<>(luceneRankMap.keySet());
             allDocIds.addAll(semanticRankMap.keySet());
 
-            // 3. Efficiently fetch all required document data
             Map<String, Document> luceneDocuments = fetchLuceneDocuments(searcher, luceneHits, allDocIds);
             Map<Long, DocumentEntity> dbEntities = fetchDatabaseEntities(allDocIds, luceneRankMap.keySet());
 
-            // 4. Build and fuse the results
-            List<SearchResult> results = allDocIds.stream()
+            return allDocIds.stream()
                 .map(docId -> buildFusedResult(
                         docId, luceneQuery, searcher,
                         luceneRankMap.get(docId), semanticRankMap.get(docId),
@@ -113,17 +137,8 @@ public class LuceneService {
                 .filter(Objects::nonNull)
                 .sorted(Comparator.comparing(SearchResult::getHybridScore).reversed())
                 .collect(Collectors.toList());
-
-            finalResponse.put("searchResults", results);
-
-            // 5. ✅ NEW: Call the generator service for a synthesized answer
-            String generatedAnswer = getGeneratedAnswer(queryStr, results);
-            finalResponse.put("generatedAnswer", generatedAnswer);
-
-            return finalResponse;
         }
     }
-
     /**
      * ✅ NEW: This method calls the generator service to get a RAG response.
      */
